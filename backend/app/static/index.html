@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>tokenwatch — LLM cost dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #2d333b;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+    header h1 { margin: 0; font-size: 20px; letter-spacing: -0.5px; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 28px 60px; }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+    .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card .value { font-size: 32px; font-weight: 700; margin-top: 6px; }
+    .card.spend .value { color: var(--green); }
+    section { margin-bottom: 32px; }
+    section h2 { font-size: 15px; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr:last-child td { border-bottom: none; }
+    .status-ok { color: var(--green); }
+    .status-err { color: #f85149; }
+    .empty { color: var(--muted); padding: 16px 10px; }
+    footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }
+    canvas { max-height: 260px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>tokenwatch</h1>
+    <span class="sub">self-hosted LLM cost dashboard · auto-refresh 10s</span>
+  </header>
+  <main>
+    <div class="cards">
+      <div class="card spend">
+        <div class="label">Total spend</div>
+        <div class="value" id="total-spend">$0.00</div>
+      </div>
+      <div class="card">
+        <div class="label">Total tokens</div>
+        <div class="value" id="total-tokens">0</div>
+      </div>
+      <div class="card">
+        <div class="label">Requests</div>
+        <div class="value" id="total-requests">0</div>
+      </div>
+    </div>
+
+    <section>
+      <h2>Spend per day</h2>
+      <div class="panel"><canvas id="day-chart"></canvas></div>
+    </section>
+
+    <section>
+      <h2>By model</h2>
+      <div class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th class="num">Requests</th>
+              <th class="num">Tokens</th>
+              <th class="num">Cost</th>
+            </tr>
+          </thead>
+          <tbody id="model-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Recent requests</h2>
+      <div class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Model</th>
+              <th class="num">Prompt</th>
+              <th class="num">Completion</th>
+              <th class="num">Cost</th>
+              <th class="num">Latency</th>
+              <th class="num">Status</th>
+            </tr>
+          </thead>
+          <tbody id="recent-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <footer>tokenwatch — point your SDK base_url here and watch the costs.</footer>
+
+  <script>
+    const fmtUsd = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    const fmtNum = (n) => Number(n || 0).toLocaleString();
+    const fmtTime = (ts) => new Date(ts * 1000).toLocaleString();
+
+    let chart;
+
+    function renderChart(byDay) {
+      const labels = byDay.map((d) => d.day);
+      const data = byDay.map((d) => d.cost_usd);
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = data;
+        chart.update();
+        return;
+      }
+      const ctx = document.getElementById("day-chart");
+      chart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{ label: "USD", data, backgroundColor: "#3fb950", borderRadius: 4 }],
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: "#2d333b" }, ticks: { color: "#8b949e" } },
+            y: { grid: { color: "#2d333b" }, ticks: { color: "#8b949e" } },
+          },
+        },
+      });
+    }
+
+    function renderModels(rows) {
+      const tbody = document.getElementById("model-rows");
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">No requests recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => `
+        <tr>
+          <td>${r.model}</td>
+          <td class="num">${fmtNum(r.count)}</td>
+          <td class="num">${fmtNum(r.total_tokens)}</td>
+          <td class="num">${fmtUsd(r.cost_usd)}</td>
+        </tr>`).join("");
+    }
+
+    function renderRecent(rows) {
+      const tbody = document.getElementById("recent-rows");
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">No requests recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((r) => {
+        const ok = r.status >= 200 && r.status < 300;
+        return `
+        <tr>
+          <td>${fmtTime(r.ts)}</td>
+          <td>${r.model}</td>
+          <td class="num">${fmtNum(r.prompt_tokens)}</td>
+          <td class="num">${fmtNum(r.completion_tokens)}</td>
+          <td class="num">${fmtUsd(r.cost_usd)}</td>
+          <td class="num">${Math.round(r.latency_ms)} ms</td>
+          <td class="num ${ok ? "status-ok" : "status-err"}">${r.status}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/api/usage");
+        const data = await res.json();
+        document.getElementById("total-spend").textContent = fmtUsd(data.summary.total_cost_usd);
+        document.getElementById("total-tokens").textContent = fmtNum(data.summary.total_tokens);
+        document.getElementById("total-requests").textContent = fmtNum(data.summary.count);
+        renderChart(data.by_day || []);
+        renderModels(data.by_model || []);
+        renderRecent(data.recent || []);
+      } catch (e) {
+        console.error("refresh failed", e);
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
