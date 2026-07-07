@@ -1,0 +1,14 @@
+# Per-model pricing in USD per 1,000,000 tokens. Edit freely — reloaded per request.
+# Prices are indicative; update to match your provider's current rate card.
+models:
+  # Anthropic
+  claude-fable-5:            { input: 5.00,  output: 25.00 }
+  claude-opus-4-8:           { input: 5.00,  output: 25.00 }
+  claude-sonnet-4-6:         { input: 3.00,  output: 15.00 }
+  claude-haiku-4-5:          { input: 0.80,  output: 4.00 }
+  # OpenAI
+  gpt-4o:                    { input: 2.50,  output: 10.00 }
+  gpt-4o-mini:               { input: 0.15,  output: 0.60 }
+  o3-mini:                   { input: 1.10,  output: 4.40 }
+  # Fallback used when a model is not listed (keeps cost non-null; flagged in UI).
+  _default:                  { input: 1.00,  output: 3.00 }

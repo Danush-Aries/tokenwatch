@@ -1,0 +1,16 @@
+services:
+  tokenwatch:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Point these at your providers (defaults shown).
+      TOKENWATCH_UPSTREAM_ANTHROPIC: https://api.anthropic.com
+      TOKENWATCH_UPSTREAM_OPENAI: https://api.openai.com
+      TOKENWATCH_DB: /data/tokenwatch.db
+    volumes:
+      - tokenwatch-data:/data
+    restart: unless-stopped
+
+volumes:
+  tokenwatch-data:
