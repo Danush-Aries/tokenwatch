@@ -7,8 +7,6 @@ editable rate card, and shows you the running spend on a live dashboard.
 
 No SDK changes beyond one line — just point your client's `base_url` at tokenwatch.
 
-![dashboard](docs/dashboard.png)
-
 ## Features
 
 - **Drop-in proxy** for `/v1/messages` (Anthropic) and `/v1/chat/completions` (OpenAI)
@@ -89,10 +87,6 @@ models fall back to the `_default` entry and are flagged in the data.
 ```bash
 uv run --extra dev pytest -q
 ```
-
-## Screenshots
-
-Place a dashboard screenshot at `docs/dashboard.png` (referenced above).
 
 ## License
 
